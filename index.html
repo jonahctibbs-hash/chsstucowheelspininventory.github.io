@@ -224,8 +224,8 @@ function updateDisplay(){
 
 // ---------------- Handle Click ----------------
 function handleClick(item){
-  const snapshot = JSON.parse(JSON.stringify(data));
-  
+  const snapshot = JSON.parse(JSON.stringify(data)); // pre-action snapshot
+
   if(item==="Donation"){
     data[item].inventory++;
     data["Total Spinned"]++;
@@ -253,12 +253,13 @@ function undo(){
     return;
   }
 
-  history.pop();
+  history.pop(); // remove last action
 
   if(history.length > 0){
-    const lastSnapshot = history[history.length-1].snapshot || originalData;
-    data = JSON.parse(JSON.stringify(lastSnapshot));
+    // restore snapshot of the last remaining action
+    data = JSON.parse(JSON.stringify(history[history.length-1].snapshot));
   } else {
+    // no history left, restore original sheet values
     data = JSON.parse(JSON.stringify(originalData));
   }
 
