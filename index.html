@@ -110,6 +110,19 @@ let originalData = {};
 const MAX_HISTORY_DISPLAY = 5;
 let historyExpanded = false;
 
+// ---------------- Debounced Sync ----------------
+let syncTimeout = null;
+function sync(){
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    data.History = history;
+    fetch(WEB_APP_URL,{
+      method:"POST",
+      body:JSON.stringify(data)
+    }).catch(err => console.error("Sync failed:", err));
+  }, 5000); // 5-second delay
+}
+
 // ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
@@ -293,15 +306,6 @@ function redistributeSectors(outItem){
   let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
   instructions.forEach(i => msg+="- "+i+"\n");
   alert(msg);
-}
-
-// ---------------- Sync with Sheet ----------------
-function sync(){
-  data.History = history;
-  fetch(WEB_APP_URL,{
-    method:"POST",
-    body:JSON.stringify(data)
-  });
 }
 </script>
 
