@@ -35,7 +35,6 @@
     .bigButton:hover{background:#2563eb;}
     .total{text-align:center;margin-top:20px;font-size:18px;}
     
-    /* History Container */
     #historyContainer{
       background:#1f2937; 
       padding:15px; 
@@ -45,8 +44,6 @@
       margin-top:10px; 
       box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     }
-
-    /* Individual History Entries */
     .historyEntry{
       margin-bottom:6px;
       font-size:16px;
@@ -60,7 +57,7 @@
       align-items:center;
     }
     .historyEntry span.date{ 
-      color:#e5e7eb; /* high-contrast light gray */
+      color:#e5e7eb; 
       font-size:14px; 
       margin-left:10px;
     }
@@ -128,37 +125,24 @@ function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
 
 // ---------------- History Functions ----------------
-function logAction(text,snapshot){
-  const time = timestamp();
-  history.push({text,time,snapshot});
-  renderHistory();
-}
-
 function renderHistory(){
   const container = document.getElementById("historyContainer");
   container.innerHTML = "";
   const total = history.length;
 
-  // newest first
   for(let i=total-1;i>=0;i--){
     const h = history[i];
     const div = document.createElement("div");
     div.className = "historyEntry";
-    if(i === total -1) div.classList.add("recent"); // highlight most recent
-
-    // collapse older if not expanded
+    if(i===total-1) div.classList.add("recent");
     if(!historyExpanded && total - i > MAX_HISTORY_DISPLAY) div.classList.add("collapsed");
-
-    div.innerHTML = `<span class="action">${h.text}</span> <span class="date">${h.time}</span>`;
+    div.innerHTML = `<span class="action">${h.text}</span> <span class="date">${h.time || ""}</span>`;
     container.appendChild(div);
   }
 
-  // update toggle button text
-  const btn = document.getElementById("toggleHistoryButton");
-  btn.innerText = historyExpanded ? "Collapse Older History" : "Show Older History";
+  document.getElementById("toggleHistoryButton").innerText = historyExpanded ? "Collapse Older History" : "Show Older History";
 }
 
-// toggle collapsed history
 function toggleHistory(){
   historyExpanded = !historyExpanded;
   renderHistory();
@@ -199,7 +183,6 @@ function renderItems(){
     container.appendChild(div);
   }
 
-  // Undo button
   const undoDiv = document.createElement("div");
   undoDiv.style.textAlign="center";
   undoDiv.style.marginTop="20px";
@@ -213,8 +196,6 @@ function updateDisplay(){
     if(item==="Total Spinned" || item==="History") continue;
     const el = document.getElementById(safeId(item));
     el.innerText = `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
-
-    // Highlight out-of-stock
     const cardEl = document.getElementById(`card-${safeId(item)}`);
     if(data[item].inventory===0) cardEl.classList.add("outOfStock");
     else cardEl.classList.remove("outOfStock");
@@ -224,7 +205,7 @@ function updateDisplay(){
 
 // ---------------- Handle Click ----------------
 function handleClick(item){
-  const preSnapshot = JSON.parse(JSON.stringify(data)); // before action
+  const preSnapshot = JSON.parse(JSON.stringify(data)); // pre-action snapshot
   const time = new Date().toLocaleString();
 
   let actionText = "";
@@ -232,40 +213,18 @@ function handleClick(item){
     data[item].inventory++;
     data["Total Spinned"]++;
     actionText = "+1 Donation";
-  }else{
-    if(data[item].inventory <= 0) return;
+  } else {
+    if(data[item].inventory<=0) return;
     data[item].inventory--;
     data["Total Spinned"]++;
     actionText = `-1 ${item}`;
   }
-function undo(){
-  if(history.length===0){ 
-    alert("No actions to undo"); 
-    return; 
-  }
 
-  // Find the last user-action (has preSnapshot)
-  for(let i = history.length-1; i>=0; i--){
-    if(history[i].preSnapshot){
-      const lastAction = history[i];
-      data = JSON.parse(JSON.stringify(lastAction.preSnapshot));
-      history.splice(i,1); // remove this action
-      break;
-    } else {
-      // skip redistribution entries
-      history.splice(i,1); // remove redistribution from top
-    }
-  }
+  // Save user action
+  history.push({text:actionText, preSnapshot:preSnapshot, time:time});
 
-  updateDisplay();
-  renderHistory();
-  sync();
-}
-  // Save user action snapshot with timestamp
-  history.push({text:actionText, preSnapshot: preSnapshot, time: time});
-
-  // Redistribution happens after, logged separately but not undoable
-  if(item !== "Donation" && data[item].inventory===0){
+  // Redistribution (not undoable)
+  if(item!=="Donation" && data[item].inventory===0){
     redistributeSectors(item);
   }
 
@@ -274,6 +233,28 @@ function undo(){
   sync();
 }
 
+// ---------------- Undo ----------------
+function undo(){
+  if(history.length===0){ alert("No actions to undo"); return; }
+
+  for(let i=history.length-1;i>=0;i--){
+    if(history[i].preSnapshot){
+      const lastAction = history[i];
+      data = JSON.parse(JSON.stringify(lastAction.preSnapshot));
+      history.splice(i,1);
+      break;
+    } else {
+      // remove redistribution entries
+      history.splice(i,1);
+    }
+  }
+
+  updateDisplay();
+  renderHistory();
+  sync();
+}
+
+// ---------------- Redistribute Sectors ----------------
 function redistributeSectors(outItem){
   let removed = data[outItem].sectors;
   if(removed===0) return;
@@ -291,10 +272,10 @@ function redistributeSectors(outItem){
     let available = Object.keys(data)
       .filter(k=>k!==outItem && k!=="Total Spinned")
       .filter(k=>data[k].inventory>0);
-    if(available.length === 0) break;
+    if(available.length===0) break;
     available.sort((a,b)=>data[b].inventory - data[a].inventory);
     for(let item of available){
-      if(remaining <= 0) break;
+      if(remaining<=0) break;
       data[item].sectors++;
       instructions.push(`Add 1 ${item} sector`);
       remaining--;
@@ -306,9 +287,8 @@ function redistributeSectors(outItem){
     }
   }
 
-  // Log redistribution actions with timestamp
   const time = new Date().toLocaleString();
-  instructions.forEach(inst => history.push({text:inst, time: time}));
+  instructions.forEach(inst => history.push({text:inst, time:time}));
 
   let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
   instructions.forEach(i => msg+="- "+i+"\n");
