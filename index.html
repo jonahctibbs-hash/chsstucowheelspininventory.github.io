@@ -225,6 +225,7 @@ function updateDisplay(){
 // ---------------- Handle Click ----------------
 function handleClick(item){
   const preSnapshot = JSON.parse(JSON.stringify(data)); // before action
+  const time = new Date().toLocaleString();
 
   let actionText = "";
   if(item==="Donation"){
@@ -238,24 +239,13 @@ function handleClick(item){
     actionText = `-1 ${item}`;
   }
 
-  // Save user action snapshot
-  history.push({text:actionText, preSnapshot: preSnapshot});
+  // Save user action snapshot with timestamp
+  history.push({text:actionText, preSnapshot: preSnapshot, time: time});
 
-  // Redistribution happens after, but not included in undo snapshot
+  // Redistribution happens after, logged separately but not undoable
   if(item !== "Donation" && data[item].inventory===0){
     redistributeSectors(item);
   }
-
-  updateDisplay();
-  renderHistory();
-  sync();
-}
-
-function undo(){
-  if(history.length===0){ alert("No actions to undo"); return; }
-
-  const lastAction = history.pop();
-  data = JSON.parse(JSON.stringify(lastAction.preSnapshot)); // restore pre-action state
 
   updateDisplay();
   renderHistory();
@@ -294,8 +284,9 @@ function redistributeSectors(outItem){
     }
   }
 
-  const snapshot = JSON.parse(JSON.stringify(data));
-  instructions.forEach(inst => history.push({text:inst})); // redistribution actions not undoable
+  // Log redistribution actions with timestamp
+  const time = new Date().toLocaleString();
+  instructions.forEach(inst => history.push({text:inst, time: time}));
 
   let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
   instructions.forEach(i => msg+="- "+i+"\n");
