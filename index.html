@@ -224,21 +224,26 @@ function updateDisplay(){
 
 // ---------------- Handle Click ----------------
 function handleClick(item){
-  const snapshot = JSON.parse(JSON.stringify(data)); // pre-action snapshot
+  const preSnapshot = JSON.parse(JSON.stringify(data)); // before action
 
+  let actionText = "";
   if(item==="Donation"){
     data[item].inventory++;
     data["Total Spinned"]++;
-    logAction("+1 Donation",snapshot);
+    actionText = "+1 Donation";
   }else{
     if(data[item].inventory <= 0) return;
     data[item].inventory--;
     data["Total Spinned"]++;
-    logAction(`-1 ${item}`,snapshot);
+    actionText = `-1 ${item}`;
+  }
 
-    if(data[item].inventory === 0){
-      redistributeSectors(item);
-    }
+  // Save user action snapshot
+  history.push({text:actionText, preSnapshot: preSnapshot});
+
+  // Redistribution happens after, but not included in undo snapshot
+  if(item !== "Donation" && data[item].inventory===0){
+    redistributeSectors(item);
   }
 
   updateDisplay();
@@ -246,29 +251,17 @@ function handleClick(item){
   sync();
 }
 
-// ---------------- Undo ----------------
 function undo(){
-  if(history.length === 0){
-    alert("No actions to undo");
-    return;
-  }
+  if(history.length===0){ alert("No actions to undo"); return; }
 
-  history.pop(); // remove last action
-
-  if(history.length > 0){
-    // restore snapshot of the last remaining action
-    data = JSON.parse(JSON.stringify(history[history.length-1].snapshot));
-  } else {
-    // no history left, restore original sheet values
-    data = JSON.parse(JSON.stringify(originalData));
-  }
+  const lastAction = history.pop();
+  data = JSON.parse(JSON.stringify(lastAction.preSnapshot)); // restore pre-action state
 
   updateDisplay();
   renderHistory();
   sync();
 }
 
-// ---------------- Redistribute Sectors ----------------
 function redistributeSectors(outItem){
   let removed = data[outItem].sectors;
   if(removed===0) return;
@@ -302,7 +295,7 @@ function redistributeSectors(outItem){
   }
 
   const snapshot = JSON.parse(JSON.stringify(data));
-  instructions.forEach(inst => logAction(inst,snapshot));
+  instructions.forEach(inst => history.push({text:inst})); // redistribution actions not undoable
 
   let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
   instructions.forEach(i => msg+="- "+i+"\n");
