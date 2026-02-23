@@ -4,15 +4,31 @@
   <title>Wheel Inventory Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial; background: #111827; color: white; padding:20px; max-width:700px; margin:auto;}
+    body { font-family: Arial, sans-serif; background: #111827; color: white; padding:20px; max-width:700px; margin:auto;}
     h2,h3{text-align:center;}
-    .card{display:flex;justify-content:space-between;align-items:center;background:#1f2937;padding:15px;margin:10px 0;border-radius:12px;}
+    .card{display:flex;justify-content:space-between;align-items:center;background:#1f2937;padding:15px;margin:10px 0;border-radius:12px;box-shadow: 0 2px 5px rgba(0,0,0,0.5);}
     .info{font-size:16px;}
-    .bigButton{font-size:22px;padding:14px 22px;border-radius:10px;background:#3b82f6;border:none;color:white;cursor:pointer;}
+    .bigButton{font-size:20px;padding:12px 20px;border-radius:10px;background:#3b82f6;border:none;color:white;cursor:pointer;transition:0.2s;}
     .bigButton:hover{background:#2563eb;}
     .total{text-align:center;margin-top:20px;font-size:18px;}
-    #historyContainer{background:#1f2937;padding:10px;border-radius:10px;max-height:300px;overflow-y:auto;margin-top:10px;}
-    .historyEntry{margin-bottom:6px;font-size:14px;color:#facc15;}
+    #historyContainer{
+      background:#1f2937; 
+      padding:15px; 
+      border-radius:12px; 
+      max-height:300px; 
+      overflow-y:auto; 
+      margin-top:10px; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
+    .historyEntry{
+      margin-bottom:6px;
+      font-size:14px;
+      padding:5px 8px;
+      border-radius:6px;
+      background: #374151;
+      color:#facc15;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+    }
   </style>
 </head>
 <body>
@@ -37,12 +53,25 @@ let history = [];
 // ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
+
+// Add entry to history visually
 function logAction(text,time){
   const container = document.getElementById("historyContainer");
   const entry = document.createElement("div");
   entry.className = "historyEntry";
+  entry.dataset.time = time;
   entry.innerText = `[${time}] ${text}`;
-  container.prepend(entry);
+  container.prepend(entry); // newest at top
+}
+
+// Render all history (clear first)
+function renderFullHistory(){
+  const container = document.getElementById("historyContainer");
+  container.innerHTML=""; // clear old
+  if(!history) return;
+  history.forEach(h=>{
+    logAction(h.text,h.time);
+  });
 }
 
 // ---------------- Load Data ----------------
@@ -94,16 +123,6 @@ function updateDisplay(){
   document.getElementById("totalSpins").innerText=data["Total Spinned"];
 }
 
-// ---------------- Render Full History ----------------
-function renderFullHistory(){
-  const container = document.getElementById("historyContainer");
-  container.innerHTML="";
-  if(!history) return;
-  history.forEach(h=>{
-    logAction(h.text,h.time);
-  });
-}
-
 // ---------------- Handle Click ----------------
 function handleClick(item){
   const snapshot = JSON.parse(JSON.stringify(data));
@@ -122,7 +141,9 @@ function handleClick(item){
     actionText = `-1 ${item}`;
     history.push({type:"subtract",item,snapshot,text:actionText,time});
 
-    if(data[item].inventory===0) redistributeSectors(item);
+    if(data[item].inventory===0){
+      redistributeSectors(item);
+    }
   }
 
   logAction(actionText,time);
@@ -133,9 +154,22 @@ function handleClick(item){
 // ---------------- Undo ----------------
 function undo(){
   if(history.length===0){alert("No actions to undo");return;}
-  history.pop(); // remove last
-  const lastSnapshot = history.length>0 ? history[history.length-1].snapshot : null;
-  if(lastSnapshot) data = JSON.parse(JSON.stringify(lastSnapshot));
+  history.pop(); // remove last action
+
+  // Restore previous snapshot or empty
+  if(history.length>0){
+    data = JSON.parse(JSON.stringify(history[history.length-1].snapshot));
+  } else {
+    // reset all inventories to 0 if no history
+    for(let item in data){
+      if(item!=="Total Spinned"){
+        data[item].inventory=0;
+        data[item].sectors=0;
+      }
+    }
+    data["Total Spinned"]=0;
+  }
+
   renderFullHistory();
   updateDisplay();
   sync();
@@ -149,14 +183,12 @@ function redistributeSectors(outItem){
   let remaining = removed;
   let instructions=[];
 
-  // Rule1: Donation <7
   if(data["Donation"].sectors<7 && remaining>0){
     data["Donation"].sectors++;
     instructions.push("Add 1 Donation sector");
     remaining--;
   }
 
-  // Rule2: distribute to items in stock
   while(remaining>0){
     let available=Object.keys(data)
       .filter(k=>k!==outItem && k!=="Total Spinned")
@@ -176,7 +208,7 @@ function redistributeSectors(outItem){
     }
   }
 
-  const time=timestamp();
+  const time = timestamp();
   instructions.forEach(inst=>{
     history.push({type:"redistribution",text:inst,time});
     logAction(inst,time);
