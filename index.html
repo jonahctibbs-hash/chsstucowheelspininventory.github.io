@@ -4,48 +4,15 @@
   <title>Wheel Inventory Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #111827;
-      color: white;
-      padding: 20px;
-      max-width: 700px;
-      margin: auto;
-    }
-    h2, h3 { text-align: center; }
-    .card {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: #1f2937;
-      padding: 15px;
-      margin: 10px 0;
-      border-radius: 12px;
-    }
-    .info { font-size: 16px; }
-    .bigButton {
-      font-size: 22px;
-      padding: 14px 22px;
-      border-radius: 10px;
-      background: #3b82f6;
-      border: none;
-      color: white;
-      cursor: pointer;
-    }
-    .bigButton:hover { background: #2563eb; }
-    .total { text-align: center; margin-top: 20px; font-size: 18px; }
-    #historyContainer {
-      background:#1f2937; 
-      padding:10px; 
-      border-radius:10px; 
-      max-height:300px; 
-      overflow-y:auto;
-      margin-top: 10px;
-    }
-    .historyEntry {
-      margin-bottom: 6px;
-      font-size: 14px;
-    }
+    body { font-family: Arial; background: #111827; color: white; padding:20px; max-width:700px; margin:auto;}
+    h2,h3{text-align:center;}
+    .card{display:flex;justify-content:space-between;align-items:center;background:#1f2937;padding:15px;margin:10px 0;border-radius:12px;}
+    .info{font-size:16px;}
+    .bigButton{font-size:22px;padding:14px 22px;border-radius:10px;background:#3b82f6;border:none;color:white;cursor:pointer;}
+    .bigButton:hover{background:#2563eb;}
+    .total{text-align:center;margin-top:20px;font-size:18px;}
+    #historyContainer{background:#1f2937;padding:10px;border-radius:10px;max-height:300px;overflow-y:auto;margin-top:10px;}
+    .historyEntry{margin-bottom:6px;font-size:14px;color:#facc15;}
   </style>
 </head>
 <body>
@@ -62,90 +29,82 @@
 <div id="historyContainer"></div>
 
 <script>
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-4EYwCLGnu2g15EyOrPcR844BFBhAVW7aUKuhY-aTDGfH_1AmVQ/exec"; // replace with /exec URL
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-4EYwCLGnu2g15EyOrPcR844BFBhAVW7aUKuhY-aTDGfH_1AmVQ/exec"; // replace with your /exec URL
 
 let data = {};
 let history = [];
 
-// ---------- Utility ----------
+// ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
-function logAction(text){
+function logAction(text,time){
   const container = document.getElementById("historyContainer");
   const entry = document.createElement("div");
   entry.className = "historyEntry";
-  entry.innerText = `[${timestamp()}] ${text}`;
+  entry.innerText = `[${time}] ${text}`;
   container.prepend(entry);
 }
 
-// ---------- Load Data ----------
+// ---------------- Load Data ----------------
 window.onload = function(){
   fetch(WEB_APP_URL)
-    .then(res => res.json())
-    .then(res => {
+    .then(res=>res.json())
+    .then(res=>{
       data = res;
       history = res.History || [];
       renderItems();
       renderFullHistory();
       updateDisplay();
     })
-    .catch(err => {
-      document.body.innerHTML = "<h2>Error loading data. Check Web App URL and deployment.</h2>";
+    .catch(err=>{
+      document.body.innerHTML="<h2>Error loading data. Check Web App URL and deployment.</h2>";
       console.error(err);
     });
 };
 
-// ---------- Render Items ----------
+// ---------------- Render Items ----------------
 function renderItems(){
   const container = document.getElementById("itemsContainer");
-  container.innerHTML = "";
-
+  container.innerHTML="";
   for(let item in data){
     if(item==="Total Spinned") continue;
-
     const div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML = `
+    div.className="card";
+    div.innerHTML=`
       <div class="info"><strong>${item}</strong><br><span id="${safeId(item)}"></span></div>
-      <button class="bigButton" onclick="handleClick('${item}')">
-        ${item==="Donation"?"+1":"-1"}
-      </button>
+      <button class="bigButton" onclick="handleClick('${item}')">${item==="Donation"?"+1":"-1"}</button>
     `;
     container.appendChild(div);
   }
-
   // Undo button
   const undoDiv = document.createElement("div");
   undoDiv.style.textAlign="center";
   undoDiv.style.marginTop="20px";
-  undoDiv.innerHTML = `<button class="bigButton" onclick="undo()">Undo Last Action</button>`;
+  undoDiv.innerHTML=`<button class="bigButton" onclick="undo()">Undo Last Action</button>`;
   container.appendChild(undoDiv);
 }
 
-// ---------- Update Display ----------
+// ---------------- Update Display ----------------
 function updateDisplay(){
   for(let item in data){
     if(item==="Total Spinned") continue;
     document.getElementById(safeId(item)).innerText =
       `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
   }
-  document.getElementById("totalSpins").innerText = data["Total Spinned"];
+  document.getElementById("totalSpins").innerText=data["Total Spinned"];
 }
 
-// ---------- Render Full History ----------
+// ---------------- Render Full History ----------------
 function renderFullHistory(){
   const container = document.getElementById("historyContainer");
-  container.innerHTML = "";
+  container.innerHTML="";
   if(!history) return;
-  history.forEach(h => {
-    const entry = document.createElement("div");
-    entry.className = "historyEntry";
-    entry.innerText = `[${h.time}] ${h.text}`;
-    container.appendChild(entry);
+  history.forEach(h=>{
+    logAction(h.text,h.time);
   });
 }
 
-// ---------- Handle Button Click ----------
+// ---------------- Handle Click ----------------
 function handleClick(item){
   const snapshot = JSON.parse(JSON.stringify(data));
   const time = timestamp();
@@ -155,94 +114,85 @@ function handleClick(item){
     data[item].inventory++;
     data["Total Spinned"]++;
     actionText = `+1 Donation`;
-    history.push({type:"donation", snapshot, text: actionText, time});
-  } else {
-    if(data[item].inventory <=0) return;
-
+    history.push({type:"donation",snapshot,text:actionText,time});
+  }else{
+    if(data[item].inventory<=0) return;
     data[item].inventory--;
     data["Total Spinned"]++;
     actionText = `-1 ${item}`;
-    history.push({type:"subtract", item, snapshot, text: actionText, time});
+    history.push({type:"subtract",item,snapshot,text:actionText,time});
 
-    if(data[item].inventory===0){
-      redistributeSectors(item);
-    }
+    if(data[item].inventory===0) redistributeSectors(item);
   }
 
-  logAction(actionText);
+  logAction(actionText,time);
   updateDisplay();
   sync();
 }
 
-// ---------- Undo ----------
+// ---------------- Undo ----------------
 function undo(){
-  if(history.length===0){ alert("No actions to undo"); return; }
-  const last = history.pop();
-  data = last.snapshot;
+  if(history.length===0){alert("No actions to undo");return;}
+  history.pop(); // remove last
+  const lastSnapshot = history.length>0 ? history[history.length-1].snapshot : null;
+  if(lastSnapshot) data = JSON.parse(JSON.stringify(lastSnapshot));
   renderFullHistory();
   updateDisplay();
   sync();
 }
 
-// ---------- Redistribute Sectors ----------
+// ---------------- Redistribute Sectors ----------------
 function redistributeSectors(outItem){
   let removed = data[outItem].sectors;
   if(removed===0) return;
-
-  data[outItem].sectors = 0;
+  data[outItem].sectors=0;
   let remaining = removed;
-  let instructions = [];
+  let instructions=[];
 
-  // Rule 1: Donation
+  // Rule1: Donation <7
   if(data["Donation"].sectors<7 && remaining>0){
     data["Donation"].sectors++;
     instructions.push("Add 1 Donation sector");
     remaining--;
   }
 
-  // Rule 2: distribute remaining to other items
+  // Rule2: distribute to items in stock
   while(remaining>0){
-    let available = Object.keys(data)
-      .filter(k => k!==outItem && k!=="Total Spinned")
-      .filter(k => data[k].inventory>0);
-
+    let available=Object.keys(data)
+      .filter(k=>k!==outItem && k!=="Total Spinned")
+      .filter(k=>data[k].inventory>0);
     if(available.length===0) break;
     available.sort((a,b)=>data[b].inventory - data[a].inventory);
-
     for(let item of available){
       if(remaining<=0) break;
       data[item].sectors++;
       instructions.push(`Add 1 ${item} sector`);
       remaining--;
     }
-
-    // If only one item left, assign all remaining
     if(available.length===1 && remaining>0){
-      data[available[0]].sectors += remaining;
+      data[available[0]].sectors+=remaining;
       instructions.push(`Add ${remaining} ${available[0]} sector(s)`);
       remaining=0;
     }
   }
 
-  // Log redistribution in history
-  const time = timestamp();
-  instructions.forEach(inst => {
-    history.push({type:"redistribution", text:inst, time});
-    logAction(inst);
+  const time=timestamp();
+  instructions.forEach(inst=>{
+    history.push({type:"redistribution",text:inst,time});
+    logAction(inst,time);
   });
 
-  // Alert user
-  let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\n\nReplace sectors as follows:\n`;
-  instructions.forEach(i => msg += "- " + i + "\n");
+  let msg=`⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
+  instructions.forEach(i=> msg+="- "+i+"\n");
   alert(msg);
 }
 
-// ---------- Sync with Sheet ----------
+// ---------------- Sync with Sheet ----------------
 function sync(){
-  data.History = history;
+  data.History=history;
   fetch(WEB_APP_URL,{
     method:"POST",
-    body: JSON.stringify(data)
+    body:JSON.stringify(data)
   });
 }
 </script>
