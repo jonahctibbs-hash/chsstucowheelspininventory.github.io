@@ -52,9 +52,10 @@
       box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
       display:flex;
       justify-content:space-between;
+      align-items:center;
     }
     .historyEntry span.date{ 
-      color:#9ca3af; 
+      color:#d1d5db; 
       font-size:14px; 
       margin-left:10px;
     }
@@ -62,6 +63,9 @@
       background:#f59e0b;
       color:#111827;
       font-weight:bold;
+    }
+    .historyEntry.collapsed{
+      display:none;
     }
   </style>
 </head>
@@ -83,39 +87,30 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-
 
 let data = {};
 let history = [];
+let originalData = {}; // original snapshot
+const MAX_HISTORY_DISPLAY = 5;
 
 // ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
 
-// Log a single history action
-function logAction(text,time,isRecent=false){
-  const container = document.getElementById("historyContainer");
-  const entry = document.createElement("div");
-  entry.className = "historyEntry";
-  if(isRecent) entry.classList.add("recent");
-
-  const actionSpan = document.createElement("span");
-  actionSpan.className = "action";
-  actionSpan.innerText = text;
-
-  const dateSpan = document.createElement("span");
-  dateSpan.className = "date";
-  dateSpan.innerText = time;
-
-  entry.appendChild(actionSpan);
-  entry.appendChild(dateSpan);
-
-  container.prepend(entry);
+// ---------------- History Logging ----------------
+function logAction(text,time,snapshot){
+  history.push({text,time,snapshot});
+  renderHistory();
 }
 
-// Render full history
-function renderFullHistory(){
+function renderHistory(){
   const container = document.getElementById("historyContainer");
-  container.innerHTML=""; // clear old
-  if(!history) return;
-  history.forEach((h,index)=>{
-    logAction(h.text,h.time,index===history.length-1); // most recent highlighted
+  container.innerHTML="";
+  const total = history.length;
+  history.forEach((h, index)=>{
+    const div = document.createElement("div");
+    div.className = "historyEntry";
+    if(index === total - 1) div.classList.add("recent"); // most recent
+    if(total - index > MAX_HISTORY_DISPLAY) div.classList.add("collapsed"); // collapse older
+    div.innerHTML = `<span class="action">${h.text}</span> <span class="date">${h.time}</span>`;
+    container.appendChild(div);
   });
 }
 
@@ -125,9 +120,10 @@ window.onload = function(){
     .then(res=>res.json())
     .then(res=>{
       data = res;
+      originalData = JSON.parse(JSON.stringify(res)); // store original sheet state
       history = res.History || [];
       renderItems();
-      renderFullHistory();
+      renderHistory();
       updateDisplay();
     })
     .catch(err=>{
@@ -141,7 +137,7 @@ function renderItems(){
   const container = document.getElementById("itemsContainer");
   container.innerHTML="";
   for(let item in data){
-    if(item==="Total Spinned" || item==="History") continue; // exclude old history
+    if(item==="Total Spinned" || item==="History") continue; 
     const div = document.createElement("div");
     div.className="card";
     div.innerHTML=`
@@ -179,43 +175,40 @@ function handleClick(item){
     data[item].inventory++;
     data["Total Spinned"]++;
     actionText = `+1 Donation`;
-    history.push({type:"donation",snapshot,text:actionText,time});
+    logAction(actionText,time,snapshot);
   }else{
     if(data[item].inventory<=0) return;
     data[item].inventory--;
     data["Total Spinned"]++;
     actionText = `-1 ${item}`;
-    history.push({type:"subtract",item,snapshot,text:actionText,time});
+    logAction(actionText,time,snapshot);
 
     if(data[item].inventory===0){
       redistributeSectors(item);
     }
   }
 
-  logAction(actionText,time,true); // most recent highlighted
   updateDisplay();
   sync();
 }
 
 // ---------------- Undo ----------------
 function undo(){
-  if(history.length===0){alert("No actions to undo");return;}
-  history.pop(); // remove last action
-
-  // Restore previous snapshot or reset if empty
-  if(history.length>0){
-    data = JSON.parse(JSON.stringify(history[history.length-1].snapshot));
-  } else {
-    for(let item in data){
-      if(item!=="Total Spinned" && item!=="History"){
-        data[item].inventory=0;
-        data[item].sectors=0;
-      }
-    }
-    data["Total Spinned"]=0;
+  if(history.length===0){ 
+    alert("No actions to undo"); 
+    return; 
   }
 
-  renderFullHistory();
+  history.pop(); // remove last action
+
+  if(history.length > 0){
+    const lastSnapshot = history[history.length - 1].snapshot || originalData;
+    data = JSON.parse(JSON.stringify(lastSnapshot));
+  } else {
+    data = JSON.parse(JSON.stringify(originalData));
+  }
+
+  renderHistory();
   updateDisplay();
   sync();
 }
@@ -255,8 +248,7 @@ function redistributeSectors(outItem){
 
   const time = timestamp();
   instructions.forEach(inst=>{
-    history.push({type:"redistribution",text:inst,time});
-    logAction(inst,time,true);
+    logAction(inst,time,JSON.parse(JSON.stringify(data)));
   });
 
   let msg=`⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
