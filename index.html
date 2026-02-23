@@ -238,7 +238,29 @@ function handleClick(item){
     data["Total Spinned"]++;
     actionText = `-1 ${item}`;
   }
+function undo(){
+  if(history.length===0){ 
+    alert("No actions to undo"); 
+    return; 
+  }
 
+  // Find the last user-action (has preSnapshot)
+  for(let i = history.length-1; i>=0; i--){
+    if(history[i].preSnapshot){
+      const lastAction = history[i];
+      data = JSON.parse(JSON.stringify(lastAction.preSnapshot));
+      history.splice(i,1); // remove this action
+      break;
+    } else {
+      // skip redistribution entries
+      history.splice(i,1); // remove redistribution from top
+    }
+  }
+
+  updateDisplay();
+  renderHistory();
+  sync();
+}
   // Save user action snapshot with timestamp
   history.push({text:actionText, preSnapshot: preSnapshot, time: time});
 
