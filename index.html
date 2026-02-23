@@ -55,7 +55,7 @@
       align-items:center;
     }
     .historyEntry span.date{ 
-      color:#d1d5db; 
+      color:#e5e7eb; /* high-contrast light gray */
       font-size:14px; 
       margin-left:10px;
     }
@@ -87,28 +87,32 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-
 
 let data = {};
 let history = [];
-let originalData = {}; // original snapshot
+let originalData = {}; // original sheet snapshot
 const MAX_HISTORY_DISPLAY = 5;
 
 // ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
 
-// ---------------- History Logging ----------------
-function logAction(text,time,snapshot){
+// ---------------- History Functions ----------------
+function logAction(text,snapshot){
+  const time = timestamp();
   history.push({text,time,snapshot});
   renderHistory();
 }
 
 function renderHistory(){
   const container = document.getElementById("historyContainer");
-  container.innerHTML="";
+  container.innerHTML = "";
   const total = history.length;
-  history.forEach((h, index)=>{
+
+  history.forEach((h,index)=>{
     const div = document.createElement("div");
     div.className = "historyEntry";
-    if(index === total - 1) div.classList.add("recent"); // most recent
-    if(total - index > MAX_HISTORY_DISPLAY) div.classList.add("collapsed"); // collapse older
+    // Highlight only most recent
+    if(index === total - 1) div.classList.add("recent");
+    // Collapse older than last MAX_HISTORY_DISPLAY
+    if(total - index > MAX_HISTORY_DISPLAY) div.classList.add("collapsed");
     div.innerHTML = `<span class="action">${h.text}</span> <span class="date">${h.time}</span>`;
     container.appendChild(div);
   });
@@ -135,9 +139,9 @@ window.onload = function(){
 // ---------------- Render Items ----------------
 function renderItems(){
   const container = document.getElementById("itemsContainer");
-  container.innerHTML="";
+  container.innerHTML = "";
   for(let item in data){
-    if(item==="Total Spinned" || item==="History") continue; 
+    if(item==="Total Spinned" || item==="History") continue;
     const div = document.createElement("div");
     div.className="card";
     div.innerHTML=`
@@ -162,54 +166,51 @@ function updateDisplay(){
     document.getElementById(safeId(item)).innerText =
       `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
   }
-  document.getElementById("totalSpins").innerText=data["Total Spinned"];
+  document.getElementById("totalSpins").innerText = data["Total Spinned"];
 }
 
 // ---------------- Handle Click ----------------
 function handleClick(item){
   const snapshot = JSON.parse(JSON.stringify(data));
-  const time = timestamp();
-  let actionText;
-
+  
   if(item==="Donation"){
     data[item].inventory++;
     data["Total Spinned"]++;
-    actionText = `+1 Donation`;
-    logAction(actionText,time,snapshot);
+    logAction("+1 Donation",snapshot);
   }else{
-    if(data[item].inventory<=0) return;
+    if(data[item].inventory <= 0) return;
     data[item].inventory--;
-    data["Total Spinned"]++;
-    actionText = `-1 ${item}`;
-    logAction(actionText,time,snapshot);
+    data["Total Spinned"]--;
+    logAction(`-1 ${item}`,snapshot);
 
-    if(data[item].inventory===0){
+    if(data[item].inventory === 0){
       redistributeSectors(item);
     }
   }
 
   updateDisplay();
+  renderHistory();
   sync();
 }
 
 // ---------------- Undo ----------------
 function undo(){
-  if(history.length===0){ 
-    alert("No actions to undo"); 
-    return; 
+  if(history.length === 0){
+    alert("No actions to undo");
+    return;
   }
 
   history.pop(); // remove last action
 
   if(history.length > 0){
-    const lastSnapshot = history[history.length - 1].snapshot || originalData;
+    const lastSnapshot = history[history.length-1].snapshot || originalData;
     data = JSON.parse(JSON.stringify(lastSnapshot));
   } else {
     data = JSON.parse(JSON.stringify(originalData));
   }
 
-  renderHistory();
   updateDisplay();
+  renderHistory();
   sync();
 }
 
@@ -221,44 +222,42 @@ function redistributeSectors(outItem){
   let remaining = removed;
   let instructions=[];
 
-  if(data["Donation"].sectors<7 && remaining>0){
+  if(data["Donation"].sectors < 7 && remaining>0){
     data["Donation"].sectors++;
     instructions.push("Add 1 Donation sector");
     remaining--;
   }
 
   while(remaining>0){
-    let available=Object.keys(data)
+    let available = Object.keys(data)
       .filter(k=>k!==outItem && k!=="Total Spinned")
       .filter(k=>data[k].inventory>0);
-    if(available.length===0) break;
+    if(available.length === 0) break;
     available.sort((a,b)=>data[b].inventory - data[a].inventory);
     for(let item of available){
-      if(remaining<=0) break;
+      if(remaining <= 0) break;
       data[item].sectors++;
       instructions.push(`Add 1 ${item} sector`);
       remaining--;
     }
     if(available.length===1 && remaining>0){
-      data[available[0]].sectors+=remaining;
+      data[available[0]].sectors += remaining;
       instructions.push(`Add ${remaining} ${available[0]} sector(s)`);
-      remaining=0;
+      remaining = 0;
     }
   }
 
-  const time = timestamp();
-  instructions.forEach(inst=>{
-    logAction(inst,time,JSON.parse(JSON.stringify(data)));
-  });
+  const snapshot = JSON.parse(JSON.stringify(data));
+  instructions.forEach(inst => logAction(inst,snapshot));
 
-  let msg=`⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
-  instructions.forEach(i=> msg+="- "+i+"\n");
+  let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
+  instructions.forEach(i => msg+="- "+i+"\n");
   alert(msg);
 }
 
 // ---------------- Sync with Sheet ----------------
 function sync(){
-  data.History=history;
+  data.History = history;
   fetch(WEB_APP_URL,{
     method:"POST",
     body:JSON.stringify(data)
