@@ -9,10 +9,10 @@
       background: #111827;
       color: white;
       padding: 20px;
-      max-width: 650px;
+      max-width: 700px;
       margin: auto;
     }
-    h2 { text-align: center; }
+    h2, h3 { text-align: center; }
     .card {
       display: flex;
       justify-content: space-between;
@@ -34,6 +34,18 @@
     }
     .bigButton:hover { background: #2563eb; }
     .total { text-align: center; margin-top: 20px; font-size: 18px; }
+    #historyContainer {
+      background:#1f2937; 
+      padding:10px; 
+      border-radius:10px; 
+      max-height:300px; 
+      overflow-y:auto;
+      margin-top: 10px;
+    }
+    .historyEntry {
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -46,48 +58,57 @@
   Total Spins: <span id="totalSpins">Loading...</span>
 </div>
 
+<h3>Action History</h3>
+<div id="historyContainer"></div>
+
 <script>
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw5p_pamqz5ChVA_CxbVhHu1nXzG5S2cMRFDwfBNaMDJew9E9PGkfrrRBz-eMUjMvfRmQ/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-4EYwCLGnu2g15EyOrPcR844BFBhAVW7aUKuhY-aTDGfH_1AmVQ/exec"; // replace with /exec URL
 
 let data = {};
 let history = [];
 
-window.onload = loadData;
+// ---------- Utility ----------
+function safeId(text){ return text.replace(/\s/g,''); }
+function timestamp(){ return new Date().toLocaleString(); }
+function logAction(text){
+  const container = document.getElementById("historyContainer");
+  const entry = document.createElement("div");
+  entry.className = "historyEntry";
+  entry.innerText = `[${timestamp()}] ${text}`;
+  container.prepend(entry);
+}
 
-// ---------------- Load Data ----------------
-function loadData() {
+// ---------- Load Data ----------
+window.onload = function(){
   fetch(WEB_APP_URL)
     .then(res => res.json())
     .then(res => {
       data = res;
       history = res.History || [];
       renderItems();
+      renderFullHistory();
       updateDisplay();
     })
     .catch(err => {
       document.body.innerHTML = "<h2>Error loading data. Check Web App URL and deployment.</h2>";
       console.error(err);
     });
-}
+};
 
-// ---------------- Render Items ----------------
-function renderItems() {
+// ---------- Render Items ----------
+function renderItems(){
   const container = document.getElementById("itemsContainer");
   container.innerHTML = "";
 
-  for (let item in data) {
-    if (item === "Total Spinned") continue;
+  for(let item in data){
+    if(item==="Total Spinned") continue;
 
     const div = document.createElement("div");
     div.className = "card";
-
     div.innerHTML = `
-      <div class="info">
-        <strong>${item}</strong><br>
-        <span id="${safeId(item)}"></span>
-      </div>
+      <div class="info"><strong>${item}</strong><br><span id="${safeId(item)}"></span></div>
       <button class="bigButton" onclick="handleClick('${item}')">
-        ${item === "Donation" ? "+1" : "-1"}
+        ${item==="Donation"?"+1":"-1"}
       </button>
     `;
     container.appendChild(div);
@@ -95,114 +116,135 @@ function renderItems() {
 
   // Undo button
   const undoDiv = document.createElement("div");
-  undoDiv.style.textAlign = "center";
-  undoDiv.style.marginTop = "20px";
+  undoDiv.style.textAlign="center";
+  undoDiv.style.marginTop="20px";
   undoDiv.innerHTML = `<button class="bigButton" onclick="undo()">Undo Last Action</button>`;
   container.appendChild(undoDiv);
 }
 
-// ---------------- Button Handler ----------------
-function handleClick(item) {
-  const snapshot = JSON.parse(JSON.stringify(data)); // snapshot before action
+// ---------- Update Display ----------
+function updateDisplay(){
+  for(let item in data){
+    if(item==="Total Spinned") continue;
+    document.getElementById(safeId(item)).innerText =
+      `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
+  }
+  document.getElementById("totalSpins").innerText = data["Total Spinned"];
+}
 
-  if (item === "Donation") {
+// ---------- Render Full History ----------
+function renderFullHistory(){
+  const container = document.getElementById("historyContainer");
+  container.innerHTML = "";
+  if(!history) return;
+  history.forEach(h => {
+    const entry = document.createElement("div");
+    entry.className = "historyEntry";
+    entry.innerText = `[${h.time}] ${h.text}`;
+    container.appendChild(entry);
+  });
+}
+
+// ---------- Handle Button Click ----------
+function handleClick(item){
+  const snapshot = JSON.parse(JSON.stringify(data));
+  const time = timestamp();
+  let actionText;
+
+  if(item==="Donation"){
     data[item].inventory++;
     data["Total Spinned"]++;
-    history.push({type:"donation", snapshot});
+    actionText = `+1 Donation`;
+    history.push({type:"donation", snapshot, text: actionText, time});
   } else {
-    if (data[item].inventory <= 0) return;
+    if(data[item].inventory <=0) return;
 
     data[item].inventory--;
     data["Total Spinned"]++;
-    history.push({type:"subtract", item, snapshot});
+    actionText = `-1 ${item}`;
+    history.push({type:"subtract", item, snapshot, text: actionText, time});
 
-    if (data[item].inventory === 0) redistributeSectors(item);
+    if(data[item].inventory===0){
+      redistributeSectors(item);
+    }
   }
 
+  logAction(actionText);
   updateDisplay();
   sync();
 }
 
-// ---------------- Undo ----------------
-function undo() {
-  if (history.length === 0) { alert("No actions to undo"); return; }
+// ---------- Undo ----------
+function undo(){
+  if(history.length===0){ alert("No actions to undo"); return; }
   const last = history.pop();
   data = last.snapshot;
+  renderFullHistory();
   updateDisplay();
   sync();
 }
 
-// ---------------- Redistribution ----------------
-function redistributeSectors(outItem) {
+// ---------- Redistribute Sectors ----------
+function redistributeSectors(outItem){
   let removed = data[outItem].sectors;
-  if (removed === 0) return;
+  if(removed===0) return;
 
   data[outItem].sectors = 0;
   let remaining = removed;
   let instructions = [];
 
-  // Rule 1: Donation gets 1 if < 7
-  if (data["Donation"].sectors < 7 && remaining > 0) {
+  // Rule 1: Donation
+  if(data["Donation"].sectors<7 && remaining>0){
     data["Donation"].sectors++;
     instructions.push("Add 1 Donation sector");
     remaining--;
   }
 
-  // Rule 2: Distribute remaining
-  while (remaining > 0) {
+  // Rule 2: distribute remaining to other items
+  while(remaining>0){
     let available = Object.keys(data)
-      .filter(k => k !== outItem && k !== "Total Spinned")
-      .filter(k => data[k].inventory > 0);
+      .filter(k => k!==outItem && k!=="Total Spinned")
+      .filter(k => data[k].inventory>0);
 
-    if (available.length === 0) break;
-    available.sort((a,b) => data[b].inventory - data[a].inventory);
+    if(available.length===0) break;
+    available.sort((a,b)=>data[b].inventory - data[a].inventory);
 
-    for (let item of available) {
-      if (remaining <= 0) break;
+    for(let item of available){
+      if(remaining<=0) break;
       data[item].sectors++;
-      instructions.push("Add 1 " + item + " sector");
+      instructions.push(`Add 1 ${item} sector`);
       remaining--;
     }
 
-    if (available.length === 1 && remaining > 0) {
+    // If only one item left, assign all remaining
+    if(available.length===1 && remaining>0){
       data[available[0]].sectors += remaining;
-      instructions.push("Add " + remaining + " " + available[0] + " sector(s)");
-      remaining = 0;
+      instructions.push(`Add ${remaining} ${available[0]} sector(s)`);
+      remaining=0;
     }
   }
 
-  showPopup(outItem, removed, instructions);
-}
+  // Log redistribution in history
+  const time = timestamp();
+  instructions.forEach(inst => {
+    history.push({type:"redistribution", text:inst, time});
+    logAction(inst);
+  });
 
-// ---------------- Popup ----------------
-function showPopup(item, removed, instructions) {
-  let msg = `⚠ ${item} is OUT OF STOCK.\n\nRemove ${removed} sector(s).\n\nReplace with:\n\n`;
+  // Alert user
+  let msg = `⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\n\nReplace sectors as follows:\n`;
   instructions.forEach(i => msg += "- " + i + "\n");
-  msg += "\nUpdate the physical wheel accordingly.";
   alert(msg);
 }
 
-// ---------------- Update Display ----------------
-function updateDisplay() {
-  for (let item in data) {
-    if (item === "Total Spinned") continue;
-    document.getElementById(safeId(item)).innerText =
-      "Inventory: " + data[item].inventory + " | Sectors: " + data[item].sectors;
-  }
-  document.getElementById("totalSpins").innerText = data["Total Spinned"];
-}
-
-// ---------------- Sync with Sheet ----------------
-function sync() {
+// ---------- Sync with Sheet ----------
+function sync(){
   data.History = history;
-  fetch(WEB_APP_URL, {
-    method: "POST",
+  fetch(WEB_APP_URL,{
+    method:"POST",
     body: JSON.stringify(data)
   });
 }
-
-// ---------------- Utils ----------------
-function safeId(text) { return text.replace(/\s/g,''); }
 </script>
 
 </body>
