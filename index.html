@@ -4,13 +4,33 @@
   <title>Wheel Inventory Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, sans-serif; background: #111827; color: white; padding:20px; max-width:700px; margin:auto;}
+    body { font-family: Arial; background: #111827; color: white; padding:20px; max-width:700px; margin:auto;}
     h2,h3{text-align:center;}
-    .card{display:flex;justify-content:space-between;align-items:center;background:#1f2937;padding:15px;margin:10px 0;border-radius:12px;box-shadow: 0 2px 5px rgba(0,0,0,0.5);}
+    .card{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      background:#1f2937;
+      padding:15px;
+      margin:10px 0;
+      border-radius:12px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
     .info{font-size:16px;}
-    .bigButton{font-size:20px;padding:12px 20px;border-radius:10px;background:#3b82f6;border:none;color:white;cursor:pointer;transition:0.2s;}
+    .bigButton{
+      font-size:20px;
+      padding:12px 20px;
+      border-radius:10px;
+      background:#3b82f6;
+      border:none;
+      color:white;
+      cursor:pointer;
+      transition:0.2s;
+    }
     .bigButton:hover{background:#2563eb;}
     .total{text-align:center;margin-top:20px;font-size:18px;}
+    
+    /* History Container */
     #historyContainer{
       background:#1f2937; 
       padding:15px; 
@@ -20,14 +40,28 @@
       margin-top:10px; 
       box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     }
+
+    /* Individual History Entries */
     .historyEntry{
       margin-bottom:6px;
-      font-size:14px;
-      padding:5px 8px;
+      font-size:16px;
+      padding:8px 10px;
       border-radius:6px;
       background: #374151;
       color:#facc15;
       box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+      display:flex;
+      justify-content:space-between;
+    }
+    .historyEntry span.date{ 
+      color:#9ca3af; 
+      font-size:14px; 
+      margin-left:10px;
+    }
+    .historyEntry.recent{
+      background:#f59e0b;
+      color:#111827;
+      font-weight:bold;
     }
   </style>
 </head>
@@ -54,23 +88,34 @@ let history = [];
 function safeId(text){ return text.replace(/\s/g,''); }
 function timestamp(){ return new Date().toLocaleString(); }
 
-// Add entry to history visually
-function logAction(text,time){
+// Log a single history action
+function logAction(text,time,isRecent=false){
   const container = document.getElementById("historyContainer");
   const entry = document.createElement("div");
   entry.className = "historyEntry";
-  entry.dataset.time = time;
-  entry.innerText = `[${time}] ${text}`;
-  container.prepend(entry); // newest at top
+  if(isRecent) entry.classList.add("recent");
+
+  const actionSpan = document.createElement("span");
+  actionSpan.className = "action";
+  actionSpan.innerText = text;
+
+  const dateSpan = document.createElement("span");
+  dateSpan.className = "date";
+  dateSpan.innerText = time;
+
+  entry.appendChild(actionSpan);
+  entry.appendChild(dateSpan);
+
+  container.prepend(entry);
 }
 
-// Render all history (clear first)
+// Render full history
 function renderFullHistory(){
   const container = document.getElementById("historyContainer");
   container.innerHTML=""; // clear old
   if(!history) return;
-  history.forEach(h=>{
-    logAction(h.text,h.time);
+  history.forEach((h,index)=>{
+    logAction(h.text,h.time,index===history.length-1); // most recent highlighted
   });
 }
 
@@ -96,7 +141,7 @@ function renderItems(){
   const container = document.getElementById("itemsContainer");
   container.innerHTML="";
   for(let item in data){
-    if(item==="Total Spinned") continue;
+    if(item==="Total Spinned" || item==="History") continue; // exclude old history
     const div = document.createElement("div");
     div.className="card";
     div.innerHTML=`
@@ -105,6 +150,7 @@ function renderItems(){
     `;
     container.appendChild(div);
   }
+
   // Undo button
   const undoDiv = document.createElement("div");
   undoDiv.style.textAlign="center";
@@ -116,7 +162,7 @@ function renderItems(){
 // ---------------- Update Display ----------------
 function updateDisplay(){
   for(let item in data){
-    if(item==="Total Spinned") continue;
+    if(item==="Total Spinned" || item==="History") continue;
     document.getElementById(safeId(item)).innerText =
       `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
   }
@@ -146,7 +192,7 @@ function handleClick(item){
     }
   }
 
-  logAction(actionText,time);
+  logAction(actionText,time,true); // most recent highlighted
   updateDisplay();
   sync();
 }
@@ -156,13 +202,12 @@ function undo(){
   if(history.length===0){alert("No actions to undo");return;}
   history.pop(); // remove last action
 
-  // Restore previous snapshot or empty
+  // Restore previous snapshot or reset if empty
   if(history.length>0){
     data = JSON.parse(JSON.stringify(history[history.length-1].snapshot));
   } else {
-    // reset all inventories to 0 if no history
     for(let item in data){
-      if(item!=="Total Spinned"){
+      if(item!=="Total Spinned" && item!=="History"){
         data[item].inventory=0;
         data[item].sectors=0;
       }
@@ -211,7 +256,7 @@ function redistributeSectors(outItem){
   const time = timestamp();
   instructions.forEach(inst=>{
     history.push({type:"redistribution",text:inst,time});
-    logAction(inst,time);
+    logAction(inst,time,true);
   });
 
   let msg=`⚠ ${outItem} is OUT OF STOCK.\nRemoved ${removed} sector(s).\nReplace sectors as follows:\n`;
