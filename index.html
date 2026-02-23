@@ -15,6 +15,11 @@
       margin:10px 0;
       border-radius:12px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+      transition:0.2s;
+    }
+    .card.outOfStock{
+      background:#b91c1c; /* red for out of stock */
+      color:white;
     }
     .info{font-size:16px;}
     .bigButton{
@@ -67,6 +72,19 @@
     .historyEntry.collapsed{
       display:none;
     }
+    #toggleHistoryButton{
+      display:block;
+      margin:10px auto;
+      background:#10b981;
+      border:none;
+      color:white;
+      padding:8px 16px;
+      border-radius:8px;
+      cursor:pointer;
+      font-size:16px;
+      transition:0.2s;
+    }
+    #toggleHistoryButton:hover{background:#059669;}
   </style>
 </head>
 <body>
@@ -81,14 +99,16 @@
 
 <h3>Action History</h3>
 <div id="historyContainer"></div>
+<button id="toggleHistoryButton" onclick="toggleHistory()">Show Older History</button>
 
 <script>
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEvnB_YFLH03HJgBM-4EYwCLGnu2g15EyOrPcR844BFBhAVW7aUKuhY-aTDGfH_1AmVQ/exec"; // replace with your /exec URL
 
 let data = {};
 let history = [];
-let originalData = {}; // original sheet snapshot
+let originalData = {};
 const MAX_HISTORY_DISPLAY = 5;
+let historyExpanded = false;
 
 // ---------------- Utility ----------------
 function safeId(text){ return text.replace(/\s/g,''); }
@@ -106,16 +126,29 @@ function renderHistory(){
   container.innerHTML = "";
   const total = history.length;
 
-  history.forEach((h,index)=>{
+  // newest first
+  for(let i=total-1;i>=0;i--){
+    const h = history[i];
     const div = document.createElement("div");
     div.className = "historyEntry";
-    // Highlight only most recent
-    if(index === total - 1) div.classList.add("recent");
-    // Collapse older than last MAX_HISTORY_DISPLAY
-    if(total - index > MAX_HISTORY_DISPLAY) div.classList.add("collapsed");
+    if(i === total -1) div.classList.add("recent"); // highlight most recent
+
+    // collapse older if not expanded
+    if(!historyExpanded && total - i > MAX_HISTORY_DISPLAY) div.classList.add("collapsed");
+
     div.innerHTML = `<span class="action">${h.text}</span> <span class="date">${h.time}</span>`;
     container.appendChild(div);
-  });
+  }
+
+  // update toggle button text
+  const btn = document.getElementById("toggleHistoryButton");
+  btn.innerText = historyExpanded ? "Collapse Older History" : "Show Older History";
+}
+
+// toggle collapsed history
+function toggleHistory(){
+  historyExpanded = !historyExpanded;
+  renderHistory();
 }
 
 // ---------------- Load Data ----------------
@@ -124,7 +157,7 @@ window.onload = function(){
     .then(res=>res.json())
     .then(res=>{
       data = res;
-      originalData = JSON.parse(JSON.stringify(res)); // store original sheet state
+      originalData = JSON.parse(JSON.stringify(res));
       history = res.History || [];
       renderItems();
       renderHistory();
@@ -144,6 +177,8 @@ function renderItems(){
     if(item==="Total Spinned" || item==="History") continue;
     const div = document.createElement("div");
     div.className="card";
+    if(data[item].inventory===0) div.classList.add("outOfStock");
+    div.id = `card-${safeId(item)}`;
     div.innerHTML=`
       <div class="info"><strong>${item}</strong><br><span id="${safeId(item)}"></span></div>
       <button class="bigButton" onclick="handleClick('${item}')">${item==="Donation"?"+1":"-1"}</button>
@@ -163,8 +198,13 @@ function renderItems(){
 function updateDisplay(){
   for(let item in data){
     if(item==="Total Spinned" || item==="History") continue;
-    document.getElementById(safeId(item)).innerText =
-      `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
+    const el = document.getElementById(safeId(item));
+    el.innerText = `Inventory: ${data[item].inventory} | Sectors: ${data[item].sectors}`;
+
+    // Highlight out-of-stock
+    const cardEl = document.getElementById(`card-${safeId(item)}`);
+    if(data[item].inventory===0) cardEl.classList.add("outOfStock");
+    else cardEl.classList.remove("outOfStock");
   }
   document.getElementById("totalSpins").innerText = data["Total Spinned"];
 }
@@ -180,7 +220,7 @@ function handleClick(item){
   }else{
     if(data[item].inventory <= 0) return;
     data[item].inventory--;
-    data["Total Spinned"]--;
+    data["Total Spinned"]++;
     logAction(`-1 ${item}`,snapshot);
 
     if(data[item].inventory === 0){
@@ -200,7 +240,7 @@ function undo(){
     return;
   }
 
-  history.pop(); // remove last action
+  history.pop();
 
   if(history.length > 0){
     const lastSnapshot = history[history.length-1].snapshot || originalData;
